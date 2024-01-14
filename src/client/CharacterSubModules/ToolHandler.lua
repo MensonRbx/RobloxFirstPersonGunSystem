@@ -31,7 +31,7 @@ function ToolHandler:init()
 end
 
 function ToolHandler:_HandleChildAdded(child)
-    task.wait() --yield for child removed to finish code first, not sure if required
+    task.wait(0.1) --yield for child removed to finish code first, not sure if required
 
     if child:GetAttribute("Moduled") then
         self._currentTool = FirstPersonTool.new(child, self._characterModuleObject)

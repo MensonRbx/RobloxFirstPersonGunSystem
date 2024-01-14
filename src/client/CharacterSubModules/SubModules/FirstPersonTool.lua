@@ -33,6 +33,7 @@ function FirstPersonTool.new(instance, characterModuleObject)
     local self = setmetatable({}, FirstPersonTool)
 
     self.instance = instance
+    self.name = instance.Name
     self.characterModuleObject = characterModuleObject
     self._viewportModelHandler = characterModuleObject.viewportModelHandler
     self._animationController = characterModuleObject.animationController
@@ -48,18 +49,18 @@ end
 
 -- Connect functions to events per tool settings
 function FirstPersonTool:init()
-    local settingsForTool = ToolSettings[self.instance.Name]
+    self._settingsForTool = ToolSettings[self.name]
     
     EquipItem:FireServer(self.instance.Name)
     
-    self:_ConnectFunctionsToEvents(settingsForTool)
+    self:_ConnectFunctionsToEvents()
     self:_CreateViewportModel()
 
-    self.animations = self._animationController:LoadAnimations(settingsForTool["Animations"])
-    
-    self:_CheckForActiavtionsOnEquip(settingsForTool)
+    self.animations = self._animationController:LoadAnimations(self._settingsForTool.Animations)
 
     coroutine.wrap(self._AnimateIdleAsync)(self)
+
+    self:_CheckForActiavtionsOnEquip()
 end
 
 function FirstPersonTool:_AnimateIdleAsync()
@@ -83,27 +84,33 @@ function FirstPersonTool:_CreateViewportModel()
 
 end
 
-function FirstPersonTool:_ConnectFunctionsToEvents(settingsForTool)
+function FirstPersonTool:_ConnectFunctionsToEvents()
     -- Context Action Functions
-    for _, functionData in pairs(settingsForTool.ContextActionFunctions) do
-        local functionName = functionData[1]
-        table.insert(self._contextActionFunctionNames, functionName)
-        ContextActionService:BindActionAtPriority(unpack(functionData))
+    for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
+        -- table.insert(self._contextActionFunctionNames, functionName)
+        print(unpack(functionData))
+        ContextActionService:BindActionAtPriority(functionName ,unpack(functionData))
     end
 
     -- Misc Functions TODO
 
 end
 
-function FirstPersonTool:_CheckForActiavtionsOnEquip(settingsForTool)
+function FirstPersonTool:_CheckForActiavtionsOnEquip()
     
-    for _, functionData in pairs(settingsForTool.ContextActionFunctions) do
-        -- local functionName = functionData[1]
+    task.wait(0.3)  -- Yield for tool to be raised
+
+    for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
+        
+        if functionName == "Fire" then
+            continue
+        end
+
         -- table.insert(self._contextActionFunctionNames, functionName)
         -- ContextActionService:BindActionAtPriority(unpack(functionData))
 
-        local contextActionFunction = functionData[2]
-        local activationEnum = functionData[5]
+        local contextActionFunction = functionData[1]
+        local activationEnum = functionData[4]
         if activationEnum.EnumType == Enum.UserInputType then -- Mouse Input
             if UserInputService:IsMouseButtonPressed(activationEnum) then
                 contextActionFunction("", Enum.UserInputState.Begin, nil)
@@ -120,7 +127,9 @@ end
 
 -- Called when the tool is unequipped
 function FirstPersonTool:Destroy()
-    for _, functionName in pairs(self._contextActionFunctionNames) do
+    for functionName, functionData in pairs(self._settingsForTool) do
+        local contextActionFunction = functionData[1]
+        contextActionFunction("", Enum.UserInputState.End, nil)
         ContextActionService:UnbindAction(functionName)
     end
 
@@ -130,8 +139,9 @@ function FirstPersonTool:Destroy()
     end
 
     self._viewportModelHandler:RemoveCurrentModel()
-    self._toolModel:Destroy()
+    -- self._toolModel:Destroy()    -- Tool Model destruction handled by ViewportModelHandler
 
+    self._toolModel = nil
 end
 
 return FirstPersonTool

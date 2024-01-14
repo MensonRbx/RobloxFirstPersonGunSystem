@@ -1,6 +1,7 @@
 --[[
-    Handles functions related to the viewport model and weapons shown within, some code
+    Handles functions related to the viewport model and weapon models shown within, some code
     taken and modified from https://devforum.roblox.com/t/the-first-person-element-of-a-first-person-shooter/160434
+
 
 
 ]]
@@ -90,10 +91,23 @@ function ViewportModelHandler:AttachModelToViewportModel(modelToAttach)
     end
 
     self._currentModel:SetAttribute("AimC1", self.modelAttachment.C0 * self._currentModel.Handle.CFrame:inverse() * self._currentModel.Aim.CFrame)
+
+    self.modelAttachment.C0 = CFrame.new(self._currentModel:GetAttribute("CurrentC0Offset") - Vector3.new(0, 1.4, 0)) * CFrame.Angles(-math.pi/4, 0, 0)
+
     self._bindModelConnection = RunService.RenderStepped:Connect(onStep)	
 end
 
 function ViewportModelHandler:RemoveCurrentModel()
+    -- LOWER CURRENT GUN
+    self._loweringWeapon = true
+
+    for i = 0, 0.6, 0.1 do
+        if self.character:FindFirstChildOfClass("Tool") then
+            break
+        end
+        task.wait(0.1)
+    end
+
     self._bindModelConnection:Disconnect()
     self._currentModel:Destroy()
 
@@ -101,6 +115,7 @@ function ViewportModelHandler:RemoveCurrentModel()
     self.viewportModel.RightUpperArm.RightShoulder.C1 = self._rightArmShoulderC1
 
     self._currentModel = nil
+    self._loweringWeapon = false
 end
 
 function ViewportModelHandler:SetViewportModelCFrame(dt)
@@ -122,8 +137,15 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
         return 
     end
 
+    if self._loweringWeapon then
+        local targetC0 = CFrame.new(self._currentModel:GetAttribute("CurrentC0Offset") - Vector3.new(0, 2.2, 0) ) * CFrame.Angles(-math.pi/3, 0, 0)
+        self.modelAttachment.C0 = self.modelAttachment.C0:Lerp(targetC0, 0.1)
+        self:UpdateArmPositions()
+        return
+    end
+
     -- 1: Setting Default Sway of the model
-    local DefaultC0Offset = self._currentModel:GetAttribute("DefaultC0Offset")    
+    local DefaultC0Offset = self._currentModel:GetAttribute("CurrentBaseC0Offset")    
     local baseBobbingSinValue = MATH_SIN(time()) * 0.05
 
     if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
@@ -133,11 +155,8 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
     local targetC0 = CFrame.new(DefaultC0Offset) * CFrame.new(0, baseBobbingSinValue, 0)
 
     -- 2: Checking if player is jumping, setting C0 from there
-    if self:_IsJumping() then
+    if self:_IsJumping() and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local jumpYValue = 0.2
-        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
-            jumpYValue *= 0.1
-        end
         targetC0 = CFrame.new(DefaultC0Offset) * CFrame.new(0, 0.2, 0)
     else
     -- 3: Setting Movement CFrame of model
@@ -152,18 +171,23 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
     local multiplyAmount = 0.25
 
     if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
-        multiplyAmount *= 0.1
+        multiplyAmount *= 0.05
     end
-    targetC0 *= CFrame.new(math.sign(rotationDifference) * multiplyAmount, 0, 0)
+    local RotationC0ToLerpTo = targetC0 * CFrame.new(math.sign(rotationDifference) * multiplyAmount, 0, 0)
+    targetC0 = targetC0:Lerp(RotationC0ToLerpTo, 0.3)
 
     -- 5: Setting Aiming CFrame of model   
-    self.modelAttachment.C0 = self.modelAttachment.C0:Lerp(targetC0, 0.07)
+    local lerpValue = 0.07
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
+        lerpValue = 0.3
+    end
+    self.modelAttachment.C0 = self.modelAttachment.C0:Lerp(targetC0, lerpValue)
 
     -- 6: Updating Arm Positions
     self:UpdateArmPositions()
 
     self._lastRotationY = currentRotationY
-    self._currentModel:SetAttribute("CurrentC0Offset", targetC0)
+    self._currentModel:SetAttribute("CurrentC0Offset", targetC0.Position)
     self._lastCharacterPosition = self.character.HumanoidRootPart.Position
 end
 
@@ -198,7 +222,7 @@ function ViewportModelHandler:_UpdateArmInteral(armKey)
     -- get shoulder we are rotating
 	local shoulder = self.viewportModel[armKey.."UpperArm"][armKey.."Shoulder"]
 	local cf = self._currentModel[armKey].CFrame * CFrame.Angles(math.pi/2, 0, 0) * CFrame.new(0, 1.5, 0)
-	shoulder.C1 = cf:inverse() * shoulder.Part0.CFrame * shoulder.C0
+	shoulder.C1 = cf:Inverse() * shoulder.Part0.CFrame * shoulder.C0
 
 end
 
