@@ -10,9 +10,12 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ToolSettings = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ToolSettings"))
+
 local RemoteEvents = ReplicatedStorage:WaitForChild("Remote"):WaitForChild("Events")
 local ItemModels = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("ItemModels")
 
+local GunFired = RemoteEvents:WaitForChild("GunFired")
 local EquipItem = RemoteEvents:WaitForChild("EquipItem")
 
 local WeaponSystemHandler = {}
@@ -31,7 +34,47 @@ function WeaponSystemHandler:init()
         self:ProcessItemEquip(player, itemName)
     end
 
+    local onGunFired = function(player, itemName, hitInstance)
+        self:ProcessGunFired(player, itemName, hitInstance)
+    end
+
     EquipItem.OnServerEvent:Connect(onEquipItem)
+    GunFired.OnServerEvent:Connect(onGunFired)
+end
+
+function WeaponSystemHandler:ProcessGunFired(player, itemName, hitInstance)
+
+    local character = player.Character
+
+    if not character then
+        warn("No character found")
+        return
+    end
+
+    local itemModel = player.Character:FindFirstChild("EquippedItem")
+    local item = player.Character:FindFirstChildOfClass("Tool")
+
+    if not item then
+        warn("No item found")
+        return
+    end
+
+    if item.Name ~= itemName then
+        warn("Item name mismatch")
+        return
+    end
+
+    local damage = ToolSettings[itemName].WeaponData.Damage
+
+    itemModel.BulletSpawn.MuzzleFlash:Emit(1)
+
+    if hitInstance then
+        local humanoid = hitInstance.Parent:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:TakeDamage(damage)
+        end
+    end
+    
 end
 
 function WeaponSystemHandler:ProcessItemEquip(player, itemName)

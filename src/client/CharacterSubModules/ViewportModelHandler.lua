@@ -2,7 +2,7 @@
     Handles functions related to the viewport model and weapon models shown within, some code
     taken and modified from https://devforum.roblox.com/t/the-first-person-element-of-a-first-person-shooter/160434
 
-
+    Also handles humanoid camera offset for recoil effects
 
 ]]
 
@@ -26,6 +26,8 @@ local JUMPING_STATES = {
     Enum.HumanoidStateType.Jumping,
     Enum.HumanoidStateType.Freefall,
 }
+
+local BASE_HUMANOID_CAMERA_OFFSET = Vector3.zero
 
 local ViewportModelHandler = {}
 ViewportModelHandler.__index = ViewportModelHandler
@@ -64,11 +66,18 @@ function ViewportModelHandler:init()
     self._leftArmShoulderC1 = self.viewportModel.LeftUpperArm.LeftShoulder.C1
     self._rightArmShoulderC1 = self.viewportModel.RightUpperArm.RightShoulder.C1
 
-    local onStep = function(dt)
+    UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+    local onStep1 = function(dt)
         self:SetViewportModelCFrame(dt)
     end
 
-    self._stepConnection = RunService.RenderStepped:Connect(onStep)
+    local onStep2 = function(dt)
+        self:UpdateHumanoidCameraOffset(dt)
+    end
+
+    self._stepConnection = RunService.RenderStepped:Connect(onStep1)
+    self._humanoidCameraOffsetConnection = RunService.RenderStepped:Connect(onStep2)
 end
 
 -- ModelToAttach is a model that will be attached to the viewport model, must have a part called "Handle"
@@ -123,11 +132,17 @@ function ViewportModelHandler:SetViewportModelCFrame(dt)
 
     local randNum = math.random(1, 2)
 
+    -- This is horrendous and I plan to fix it later
     if randNum == 2 then
         local theta = MATH_ASIN(currentCamera.CFrame.LookVector.Y)
         UpdateCharacterRotation:FireServer(theta)
     end
 
+end
+
+function ViewportModelHandler:UpdateHumanoidCameraOffset()
+    local currentOffset = self.humanoid.CameraOffset
+    self.humanoid.CameraOffset = currentOffset:Lerp(BASE_HUMANOID_CAMERA_OFFSET, 0.1)
 end
 
 -- Setting the CFrame of the model that is attached to the viewport model (the tool)
@@ -145,19 +160,20 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
     end
 
     -- 1: Setting Default Sway of the model
-    local DefaultC0Offset = self._currentModel:GetAttribute("CurrentBaseC0Offset")    
+    local CurrentBaseC0Offset = self._currentModel:GetAttribute("CurrentBaseC0Offset")    
+    local DefaultC0Offset = self._currentModel:GetAttribute("DefaultC0Offset")
     local baseBobbingSinValue = MATH_SIN(time()) * 0.05
 
     if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
         baseBobbingSinValue *= 0.025
     end
 
-    local targetC0 = CFrame.new(DefaultC0Offset) * CFrame.new(0, baseBobbingSinValue, 0)
+    local targetC0 = CFrame.new(CurrentBaseC0Offset) * CFrame.new(0, baseBobbingSinValue, 0)
 
     -- 2: Checking if player is jumping, setting C0 from there
     if self:_IsJumping() and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-        local jumpYValue = 0.2
-        targetC0 = CFrame.new(DefaultC0Offset) * CFrame.new(0, 0.2, 0)
+        local jumpYValue = 0.5
+        targetC0 = CFrame.new(CurrentBaseC0Offset) * CFrame.new(0, jumpYValue, 0)
     else
     -- 3: Setting Movement CFrame of model
         if self.humanoid.MoveDirection.Magnitude > 0.05 then
@@ -185,6 +201,9 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
 
     -- 6: Updating Arm Positions
     self:UpdateArmPositions()
+
+    -- 7: Set current base C0 offset to default c0 offset offset by a lerp amount
+    self._currentModel:SetAttribute("CurrentBaseC0Offset", self._currentModel:GetAttribute("CurrentBaseC0Offset"):Lerp(DefaultC0Offset, 0.1))
 
     self._lastRotationY = currentRotationY
     self._currentModel:SetAttribute("CurrentC0Offset", targetC0.Position)

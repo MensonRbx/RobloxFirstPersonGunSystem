@@ -14,6 +14,7 @@ function MainReplicationModule.new()
     local self = setmetatable({}, MainReplicationModule)
     
     self.RotationReplicationModule = require(SubReplicationModules:WaitForChild("RotationReplicationModule"))
+    self.SoundReplicationModule = require(SubReplicationModules:WaitForChild("SoundReplicationModule")) 
 
     self:init()
 

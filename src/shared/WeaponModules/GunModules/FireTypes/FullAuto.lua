@@ -1,5 +1,13 @@
+local RunService = game:GetService("RunService")
+
+if RunService:IsServer() then
+    return 1
+end
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+
+local _FireFunction = require(script.Parent._FireFunction)
 
 local localPlayer = Players.LocalPlayer
 local currentCamera = workspace.CurrentCamera

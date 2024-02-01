@@ -11,12 +11,19 @@
         Called when the tool is unequipped
 
 ]]
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ToolSettings = require(Shared:WaitForChild("ToolSettings"))
+
+local localPlayer = Players.LocalPlayer
+
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+local ReticleGui = playerGui:WaitForChild("ReticleGui")
+local ReticleMain = ReticleGui:WaitForChild("ReticleMain")
 
 local RemoteEvents = ReplicatedStorage:WaitForChild("Remote"):WaitForChild("Events")
 
@@ -25,10 +32,11 @@ local EquipItem = RemoteEvents:WaitForChild("EquipItem")
 local Assets = ReplicatedStorage:WaitForChild("Assets")
 local ItemModels = Assets:WaitForChild("ItemModels")
 
+local currentlyUnequipping = false
+
 local FirstPersonTool = {}
 FirstPersonTool.__index = FirstPersonTool
 
--- FirstPersonTool.new is called when a tool is equipped
 function FirstPersonTool.new(instance, characterModuleObject)
     local self = setmetatable({}, FirstPersonTool)
 
@@ -42,9 +50,27 @@ function FirstPersonTool.new(instance, characterModuleObject)
 
     self._toolModel = nil
 
+    if currentlyUnequipping then
+       repeat
+        task.wait()
+       until not currentlyUnequipping or self.instance.Parent ~= characterModuleObject.character
+
+       if self.instance.Parent ~= characterModuleObject.character then
+            self:_CleanupForEarlyUnequip()
+            return
+       end
+
+    end
+
     self:init()
 
     return self
+end
+
+function FirstPersonTool:_CleanupForEarlyUnequip()
+    for i in self do
+        self[i] = nil
+    end
 end
 
 -- Connect functions to events per tool settings
@@ -53,14 +79,16 @@ function FirstPersonTool:init()
     
     EquipItem:FireServer(self.instance.Name)
     
-    self:_ConnectFunctionsToEvents()
-    self:_CreateViewportModel()
-
     self.animations = self._animationController:LoadAnimations(self._settingsForTool.Animations)
 
-    coroutine.wrap(self._AnimateIdleAsync)(self)
-
+    self:_ConnectFunctionsToEvents()
+    self:_CreateViewportModel()
     self:_CheckForActiavtionsOnEquip()
+
+    ReticleMain.Visible = true
+    UserInputService.MouseIconEnabled = true
+
+    coroutine.wrap(self._AnimateIdleAsync)(self)
 end
 
 function FirstPersonTool:_AnimateIdleAsync()
@@ -87,8 +115,6 @@ end
 function FirstPersonTool:_ConnectFunctionsToEvents()
     -- Context Action Functions
     for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
-        -- table.insert(self._contextActionFunctionNames, functionName)
-        print(unpack(functionData))
         ContextActionService:BindActionAtPriority(functionName ,unpack(functionData))
     end
 
@@ -127,7 +153,16 @@ end
 
 -- Called when the tool is unequipped
 function FirstPersonTool:Destroy()
-    for functionName, functionData in pairs(self._settingsForTool) do
+
+    if currentlyUnequipping then 
+        return
+    end
+    
+    UserInputService.MouseIconEnabled = true
+    currentlyUnequipping = true
+    ReticleMain.Visible = false
+
+    for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
         local contextActionFunction = functionData[1]
         contextActionFunction("", Enum.UserInputState.End, nil)
         ContextActionService:UnbindAction(functionName)
@@ -140,6 +175,8 @@ function FirstPersonTool:Destroy()
 
     self._viewportModelHandler:RemoveCurrentModel()
     -- self._toolModel:Destroy()    -- Tool Model destruction handled by ViewportModelHandler
+
+    currentlyUnequipping = false
 
     self._toolModel = nil
 end
