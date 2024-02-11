@@ -164,7 +164,7 @@ function FirstPersonTool:Destroy()
 
     for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
         local contextActionFunction = functionData[1]
-        contextActionFunction("", Enum.UserInputState.End, nil)
+        -- contextActionFunction("", Enum.UserInputState.End, nil)
         ContextActionService:UnbindAction(functionName)
     end
 

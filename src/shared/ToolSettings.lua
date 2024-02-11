@@ -23,13 +23,14 @@ local ToolSettings = {}
 
 ToolSettings["SCAR-H"] = {
     ContextActionFunctions = {
-        Fire = {FireTypes["SemiAuto"], false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseButton1},
+        Fire = {FireTypes["FullAuto"], false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseButton1},
         AimDownSights = {AimDownSightsFunction, false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseButton2},
         Reload = {ReloadTypes["Magazine"], false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.R},
         Inspect = {InspectFunction, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.T},
     },
     WeaponData = {
-        Damage = 20
+        Damage = 40,
+        FireRate = 0.12,
     },
     Animations = {
         Idle = "rbxassetid://15882435035",
@@ -38,6 +39,22 @@ ToolSettings["SCAR-H"] = {
     }
 }
 
-ToolSettings["SCAR-L"] = ToolSettings["SCAR-H"]
+ToolSettings["SCAR-L"] = {
+    ContextActionFunctions = {
+        Fire = {FireTypes["SemiAuto"], false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseButton1},
+        AimDownSights = {AimDownSightsFunction, false, Enum.ContextActionPriority.High.Value, Enum.UserInputType.MouseButton2},
+        Reload = {ReloadTypes["Magazine"], false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.R},
+        Inspect = {InspectFunction, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.T},
+    },
+    WeaponData = {
+        Damage = 30,
+        FireRate = 0.2,
+    },
+    Animations = {
+        Idle = "rbxassetid://15882435035",
+        Fire = "",
+        Reload = "",
+    }
+}
 
 return ToolSettings

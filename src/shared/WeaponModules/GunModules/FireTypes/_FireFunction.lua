@@ -50,16 +50,16 @@ end
 
 local function ApplyCameraRecoilImpulse()
 
-    local xValue = math.random(1, 10) * 0.4
-    local yValue = math.random(1, 10) * 0.4
-    local zValue = math.random(1, 10) * 0.8
+    local xValue = math.random(1, 10) * 0.06
+    local yValue = math.random(1, 10) * 0.06
+    local zValue = math.random(1, 10) * 0.06
     
+    local startCFrame = currentCamera.CFrame
+
     for i = 0, 1, 0.1 do
         local easingAmount = EasingStyleConfig.EaseOutBack(i)
-        print(easingAmount)
-
-        currentCamera.CFrame = currentCamera.CFrame * CFrame.Angles(math.rad(xValue * easingAmount), math.rad(yValue * easingAmount), math.rad(zValue * easingAmount))
-        task.wait()
+        currentCamera.CFrame *= CFrame.Angles(math.rad(xValue * easingAmount), math.rad(yValue * easingAmount), math.rad(zValue * easingAmount))
+        task.wait(0.01)
     end
 
 end
