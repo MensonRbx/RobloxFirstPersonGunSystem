@@ -35,16 +35,17 @@ ViewportModelHandler.__index = ViewportModelHandler
 function ViewportModelHandler.new(character)
     local self = setmetatable({}, ViewportModelHandler)
 
+    print("ViewportModelHandler.new")
+
     self.character = character
     self.humanoid = character:WaitForChild("Humanoid")
 
     self.viewportModel = nil
     self._currentModel = nil
-    self._stepConnection = nil
-    self._movementBobbingValue = 0
 
-    self.baseNeckC0 = CFrame.new(-0, 0.849, 0)
-    self.baseNeckC1 = CFrame.new(0, -0.491, -0)
+    self._stepConnection = nil
+
+    self._movementBobbingValue = 0
     
     self:init()
 
@@ -54,8 +55,10 @@ end
 function ViewportModelHandler:init()
 
     self.viewportModel = baseViewportModel:Clone()
+    self.modelAttachment = Instance.new("Motor6D")
+    self.modelAttachment.Name = "ModelAttachment"
+    self.modelAttachment.Parent = self.viewportModel.Head
     self.viewportModel.Parent = workspace.CurrentCamera
-    self.animator = self.viewportModel.AnimationController.Animator
 
     local humanoidRootPart = self.character:WaitForChild("HumanoidRootPart")
 
@@ -80,77 +83,47 @@ function ViewportModelHandler:init()
 end
 
 -- ModelToAttach is a model that will be attached to the viewport model, must have a part called "Handle"
-function ViewportModelHandler:AttachModelToViewportModel(firstPersonTool)
-    self.firstPersonTool = firstPersonTool
-    local modelToAttach = firstPersonTool.toolModel
-    task.wait(0.1) -- Moment to wait until last model is destroyed and viewportAnimations halted
+function ViewportModelHandler:AttachModelToViewportModel(modelToAttach)
     if self._currentModel then
         self:RemoveCurrentModel()
     end
 
-    print("Attaching model to viewport model", modelToAttach)
-
-    local viewportModelUpperTorso = self.viewportModel.UpperTorso 
-    self.modelAttachment = Instance.new("Motor6D")
-    self.modelAttachment.Name = "BodyAttachToViewportModel"
-    self.modelAttachment.Part0 = viewportModelUpperTorso
-    self.modelAttachment.Part1 = modelToAttach:FindFirstChild("BodyAttach")
-    self.modelAttachment.C0 = CFrame.new()
+    local viewportModelRootPart = self.viewportModel.ViewportModelRootPart 
+    local bodyAttach = modelToAttach:FindFirstChild("BodyAttach") -- Custom "Handle", allows for animations where RightHand isn't welded to handle
+    self.modelAttachment.C0 = CFrame.new(modelToAttach:GetAttribute("DefaultC0Offset"))
     self.modelAttachment.C1 = CFrame.new()
-    self.modelAttachment.Parent = viewportModelUpperTorso
-    modelToAttach.Parent = self.viewportModel
+    self.modelAttachment.Part0 = viewportModelRootPart
+    self.modelAttachment.Part1 = bodyAttach
+    modelToAttach.Parent = viewportModelRootPart
 
     self._currentModel = modelToAttach
 
-    local onRunAnimationsOnStep = function(dt)
-        self:AnimateViewportModel(dt)
-    end
-
-    local onApplyCFrameImpulse = function(dt)
+    local onStep = function(dt)
         self:SetCurrentModelCFrame(dt)
     end
 
-    self._animateConnection = RunService.RenderStepped:Connect(onRunAnimationsOnStep)
-    self._applyCFrameImpulseConnection = RunService.RenderStepped:Connect(onApplyCFrameImpulse)
-end
-
-function ViewportModelHandler:AnimateViewportModel()
-    if self._currentModel:GetAttribute("Reloading") then
-        return
-    end
-    if self._currentModel:GetAttribute("Aiming") then
-        if not self.firstPersonTool.viewportAnimations.Aim.IsPlaying then
-            self.firstPersonTool.viewportAnimations.Aim:Play()
-        end
-        self.firstPersonTool.viewportAnimations.Idle:Stop()
-    else
-        if not self.firstPersonTool.viewportAnimations.Idle.IsPlaying then
-            self.firstPersonTool.viewportAnimations.Idle:Play()
-        end
-        self.firstPersonTool.viewportAnimations.Aim:Stop()
-    end     
+    self._currentModel:SetAttribute("AimC1", self.modelAttachment.C0 * bodyAttach.CFrame:inverse() * self._currentModel.Aim.CFrame)
+    self.modelAttachment.C0 = CFrame.new(self._currentModel:GetAttribute("CurrentC0Offset") - Vector3.new(0, 1.4, 0)) * CFrame.Angles(-math.pi/4, 0, 0)
+    self._bindModelConnection = RunService.RenderStepped:Connect(onStep)	
 end
 
 function ViewportModelHandler:RemoveCurrentModel()
     -- LOWER CURRENT GUN
     self._loweringWeapon = true
-    local neck = self.viewportModel.Head.Neck
 
-    for i = 0, 1, 0.1 do
-        local targetCFrame = self.baseNeckC0 * CFrame.Angles(i, 0, 0)
-        neck.C0 = neck.C0:Lerp(targetCFrame, 0.2)
-        task.wait()
+    for i = 0, 0.6, 0.1 do
+        if self.character:FindFirstChildOfClass("Tool") then
+            break
+        end
+        task.wait(0.1)
     end
 
---  self._bindModelConnection:Disconnect()
-    self.firstPersonTool.viewportAnimations.Idle:Stop() 
-    self.firstPersonTool.viewportAnimations.Aim:Stop()
-    self._animateConnection:Disconnect()
-    self._applyCFrameImpulseConnection:Disconnect()
+    self._bindModelConnection:Disconnect()
     self._currentModel:Destroy()
-    print("Removing current model")
 
-    self.modelAttachment:Destroy()
+    self.viewportModel.LeftUpperArm.LeftShoulder.C1 = self._leftArmShoulderC1
+    self.viewportModel.RightUpperArm.RightShoulder.C1 = self._rightArmShoulderC1
+
     self._currentModel = nil
     self._loweringWeapon = false
 end
@@ -159,13 +132,15 @@ end
 -- Purpose of random number part is to update the character's rotation serverside every so often depending on the random number
 -- This is not ideal at all, and I plan on changing this later to something more fitting.
 function ViewportModelHandler:SetViewportModelCFrame(dt)
-    self.viewportModel.Head.CFrame = currentCamera.CFrame
+    self.viewportModel.Head.CFrame = currentCamera.CFrame 
 
     local randNum = math.random(1, 4)
+
     if randNum == 2 then
         local theta = MATH_ASIN(currentCamera.CFrame.LookVector.Y)
         UpdateCharacterRotation:FireServer(theta)
     end
+
 end
 
 function ViewportModelHandler:UpdateHumanoidCameraOffset()
@@ -180,51 +155,86 @@ function ViewportModelHandler:SetCurrentModelCFrame(dt)
         return 
     end
 
-    local neck = self.viewportModel.Head.Neck
-    local targetC0 = self.baseNeckC0
-    local targetC1 = self.baseNeckC1
-
-    -- Speed/Jump Check
-    if self.humanoid.MoveDirection.Magnitude > 0.05 and not self:_IsJumping() then
-        targetC0 = self:_ModifyCFrameWithMovementBobbing(self.baseNeckC0)
-    elseif self:_IsJumping() then
-        targetC0 = self.baseNeckC0 * CFrame.new(0, -1, 0)
+    if self._loweringWeapon then
+        local targetC0
+        if self._currentModel:GetAttribute("Aiming") then
+            targetC0 = CFrame.new(self._currentModel:GetAttribute("CurrentC0Offset") - Vector3.new(-0.6, 2.2, 0) ) * CFrame.Angles(-math.pi/4, 0, 0)
+        else
+            targetC0 = CFrame.new(self._currentModel:GetAttribute("CurrentC0Offset") - Vector3.new(0, 2.2, 0) ) * CFrame.Angles(-math.pi/3, 0, 0)
+        end
+        self.modelAttachment.C0 = self.modelAttachment.C0:Lerp(targetC0, 0.1)
+        self:UpdateArmPositions()
+        return
     end
 
-    -- Rotation Check
+    -- 1: Setting Default Sway of the model
+    local CurrentBaseC0Offset = self._currentModel:GetAttribute("CurrentBaseC0Offset")    
+    local DefaultC0Offset = self._currentModel:GetAttribute("DefaultC0Offset")
+    local baseBobbingSinValue = MATH_SIN(time()) * 0.05
+
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
+        baseBobbingSinValue *= 0.025
+    end
+
+    local targetC0 = CFrame.new(CurrentBaseC0Offset) * CFrame.new(0, baseBobbingSinValue, 0)
+
+    -- 2: Checking if player is jumping, setting C0 from there
+    if self:_IsJumping() and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local jumpYValue = 0.5
+        targetC0 = CFrame.new(CurrentBaseC0Offset) * CFrame.new(0, jumpYValue, 0)
+    else
+    -- 3: Setting Movement CFrame of model
+        if self.humanoid.MoveDirection.Magnitude > 0.05 then
+            targetC0 = self:_ModifyTargetC0WithMovementBobbing(targetC0)
+        end
+    end
+
+    -- 4: Modifying CFrame from rotation
     local currentRotationY = self.character.HumanoidRootPart.Orientation.Y
     local rotationDifference = (currentRotationY - self._lastRotationY) * 0.1
     local multiplyAmount = 0.25
+
     if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
         multiplyAmount *= 0.05
     end
     local RotationC0ToLerpTo = targetC0 * CFrame.new(math.sign(rotationDifference) * multiplyAmount, 0, 0)
     targetC0 = targetC0:Lerp(RotationC0ToLerpTo, 0.3)
 
-    neck.C0 = neck.C0:Lerp(targetC0, 0.2)
-    neck.C1 = neck.C1:Lerp(targetC1, 0.2)
+    -- 5: Setting Aiming CFrame of model   
+    local lerpValue = 0.07
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then 
+        lerpValue = 0.3
+    end
+    self.modelAttachment.C0 = self.modelAttachment.C0:Lerp(targetC0, lerpValue)
 
-    self._lastCharacterPosition = self.character.HumanoidRootPart.Position
+    -- 6: Updating Arm Positions
+    self:UpdateArmPositions()
+
+    -- 7: Set current base C0 offset to default c0 offset offset by a lerp amount
+    self._currentModel:SetAttribute("CurrentBaseC0Offset", self._currentModel:GetAttribute("CurrentBaseC0Offset"):Lerp(DefaultC0Offset, 0.1))
+
     self._lastRotationY = currentRotationY
+    self._currentModel:SetAttribute("CurrentC0Offset", targetC0.Position)
+    self._lastCharacterPosition = self.character.HumanoidRootPart.Position
 end
 
 function ViewportModelHandler:_IsJumping()
     return table.find(JUMPING_STATES, self.humanoid:GetState())
 end
 
-function ViewportModelHandler:_ModifyCFrameWithMovementBobbing(currentTargetc0)
+function ViewportModelHandler:_ModifyTargetC0WithMovementBobbing(currentTargetc0)
     local currentPosition = self.character.HumanoidRootPart.Position
 
-    self._movementBobbingValue += ((currentPosition - self._lastCharacterPosition).Magnitude)
-    local movementBobbingSinValue = MATH_SIN(self._movementBobbingValue * 0.6)
-    local yVal = 0.5
+    self._movementBobbingValue += ((currentPosition - self._lastCharacterPosition).Magnitude * 0.5)
+    local movementBobbingSinValue = MATH_SIN(self._movementBobbingValue) * 0.075
+    local yVal = -0.2
 
     if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then --self._currentModel:GetAttribute("Aiming") then
         movementBobbingSinValue *= 0.025
         yVal = 0
     end
 
-    currentTargetc0 *= CFrame.new(movementBobbingSinValue * 0.3, yVal, movementBobbingSinValue * 0.08)
+    currentTargetc0 *= CFrame.new(movementBobbingSinValue, yVal , movementBobbingSinValue * 0.75)
 
     return currentTargetc0
 end

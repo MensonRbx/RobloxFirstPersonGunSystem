@@ -17,19 +17,21 @@ local ItemModels = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("ItemMo
 
 local GunFired = RemoteEvents:WaitForChild("GunFired")
 local EquipItem = RemoteEvents:WaitForChild("EquipItem")
+local ReloadWeaponRequest = RemoteEvents:WaitForChild("ReloadWeaponRequest")    
+local PlayServerAnimation = RemoteEvents:WaitForChild("PlayServerAnimation")
 
-local WeaponSystemHandler = {}
-WeaponSystemHandler.__index = WeaponSystemHandler
+local WeaponSystemModule = {}
+WeaponSystemModule.__index = WeaponSystemModule
 
-function WeaponSystemHandler.new()
-    local self = setmetatable({}, WeaponSystemHandler)
+function WeaponSystemModule.new()
+    local self = setmetatable({}, WeaponSystemModule)
 
     self:init()
 
     return self
 end
 
-function WeaponSystemHandler:init()
+function WeaponSystemModule:init()
     local onEquipItem = function(player, itemName)
         self:ProcessItemEquip(player, itemName)
     end
@@ -42,7 +44,7 @@ function WeaponSystemHandler:init()
     GunFired.OnServerEvent:Connect(onGunFired)
 end
 
-function WeaponSystemHandler:ProcessGunFired(player, itemName, hitInstance)
+function WeaponSystemModule:ProcessGunFired(player, itemName, hitInstance)
 
     local character = player.Character
 
@@ -66,8 +68,6 @@ function WeaponSystemHandler:ProcessGunFired(player, itemName, hitInstance)
 
     local damage = ToolSettings[itemName].WeaponData.Damage
 
-    itemModel.BulletSpawn.MuzzleFlash:Emit(1)
-
     if hitInstance then
         local humanoid = hitInstance.Parent:FindFirstChildOfClass("Humanoid")
         if humanoid then
@@ -77,7 +77,7 @@ function WeaponSystemHandler:ProcessGunFired(player, itemName, hitInstance)
     
 end
 
-function WeaponSystemHandler:ProcessItemEquip(player, itemName)
+function WeaponSystemModule:ProcessItemEquip(player, itemName)
     local itemToEquip = ItemModels:FindFirstChild(itemName, true)
 
     if itemToEquip then
@@ -89,13 +89,13 @@ function WeaponSystemHandler:ProcessItemEquip(player, itemName)
     
 end
 
-function WeaponSystemHandler:_EquipItem(player, itemToEquip)
+function WeaponSystemModule:_EquipItem(player, itemToEquip)
     local character = player.Character    
 	local joint = Instance.new("Motor6D")
     
 	joint.Part0 = character.RightHand
-	joint.Part1 = itemToEquip.Handle
-	joint.Parent = itemToEquip.Handle
+	joint.Part1 = itemToEquip.BodyAttach
+	joint.Parent = itemToEquip.BodyAttach
 
     joint.C0 = itemToEquip:GetAttribute("ServerSideToolHandleCFrame")
 
@@ -105,7 +105,11 @@ function WeaponSystemHandler:_EquipItem(player, itemToEquip)
     itemToEquip.Name = "EquippedItem"
 end
 
-function WeaponSystemHandler:_RemoveCurrentEquippedItem(player)
+function WeaponSystemModule:_ReplicateItemAnimation(player, itemName, itemAnimationName)
+    
+end
+
+function WeaponSystemModule:_RemoveCurrentEquippedItem(player)
     local character = player.Character
     local itemToDestroy = character:FindFirstChild("EquippedItem")
     if itemToDestroy then
@@ -113,4 +117,4 @@ function WeaponSystemHandler:_RemoveCurrentEquippedItem(player)
     end
 end
 
-return WeaponSystemHandler.new()
+return WeaponSystemModule.new()

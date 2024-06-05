@@ -11,7 +11,7 @@ local localPlayer = Players.LocalPlayer
 
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local ReticleGui = playerGui:WaitForChild("ReticleGui")
-local ReticleMain = ReticleGui:WaitForChild("ReticleMain")
+local GunReticle = ReticleGui:WaitForChild("GunReticle")
 
 local currentCamera = workspace.CurrentCamera
 
@@ -28,7 +28,7 @@ local function moveModel(adsJoint, goalC1)
     local start = adsJoint.C1
 
 	for t = 0, 109, 10 do
-		game:GetService("RunService").RenderStepped:Wait();
+		RunService.RenderStepped:Wait();
 		adsJoint.C1 = start:Lerp(goalC1, t/100);
 	end
 
@@ -41,21 +41,18 @@ return function (_, inputState, inputObject)
     end
 
     local viewportModel = getLocalPlayerViewportModel()
-    local adsJoint = viewportModel.Head:WaitForChild("ModelMotor6D")
-    local toolModel = viewportModel.Head:FindFirstChildOfClass("Model")
+    local toolModel = viewportModel:FindFirstChildOfClass("Model")
 
     if inputState == Enum.UserInputState.Begin then
+        GunReticle.Visible = false
         local target = toolModel:GetAttribute("AimC1")
         toolModel:SetAttribute("Aiming", true)
-        UserInputService.MouseIconEnabled = false
-        moveModel(adsJoint, target)
-        ReticleMain.Visible = false
+        -- UserInputService.MouseIconEnabled = false
     
     elseif inputState == Enum.UserInputState.End then
-        task.delay(0.25, toolModel.SetAttribute, toolModel, "Aiming", false)
-        UserInputService.MouseIconEnabled = true
-        moveModel(adsJoint, CFrame.new())
-        ReticleMain.Visible = true
+        GunReticle.Visible = true
+        toolModel:SetAttribute("Aiming", false)
+        -- UserInputService.MouseIconEnabled = true
     
     end
 end

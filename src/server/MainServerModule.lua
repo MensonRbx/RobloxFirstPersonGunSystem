@@ -7,7 +7,7 @@ function MainServerModule.new()
     local self = setmetatable({}, MainServerModule)
 
     self.MainReplicationModule = require(SubModules:WaitForChild("MainReplicationModule"))
-    self.WeaponSystemHandler = require(SubModules:WaitForChild("WeaponSystemHandler"))
+    self.WeaponSystemModule = require(SubModules:WaitForChild("WeaponSystemModule"))
 
     return self
 end

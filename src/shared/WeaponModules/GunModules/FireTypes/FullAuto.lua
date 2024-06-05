@@ -25,12 +25,13 @@ local function getCurrentFPSToolInstance()
     return character:FindFirstChildOfClass("Tool")
 end
 
-local function getCurrentToolData(ToolSettings)
+local function getCurrentToolData()
+    local ToolSettings = require(Shared:WaitForChild("ToolSettings"))
     return ToolSettings[getCurrentFPSToolInstance().Name]
 end
 
 local function getViewportToolModel(viewportModel)
-    return viewportModel.Head:FindFirstChildOfClass("Model")
+    return viewportModel:FindFirstChildOfClass("Model")
 end
 
 local function beginFire(toolData, toolModel, toolInstance)
@@ -43,8 +44,8 @@ local function beginFire(toolData, toolModel, toolInstance)
     
     while 
         UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) 
-        and toolInstance:GetAttribute("CurrentAmmo") > 0 
-        and toolInstance:IsDescendantOf(workspace) 
+        and toolModel:GetAttribute("Ammo") > 0 
+        and toolModel:IsDescendantOf(workspace) 
     do
         _FireFunction(toolModel, toolInstance)
         task.wait(fireRate)
@@ -63,12 +64,14 @@ return function (_, inputState)
         return
     end
 
-    local ToolSettings = require(Shared:WaitForChild("ToolSettings"))
-
-    local toolData = getCurrentToolData(ToolSettings)
+    local toolData = getCurrentToolData()
     local viewportModel = getLocalPlayerViewportModel()
     local toolInstance = getCurrentFPSToolInstance()
     local toolModel = getViewportToolModel(viewportModel)
+
+    if toolModel:GetAttribute("Reloading") or toolModel:GetAttribute("Ammo") == 0 then
+        return
+    end
 
     if inputState == Enum.UserInputState.Begin then
         print("FullAuto:Begin")

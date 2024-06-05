@@ -23,8 +23,8 @@ local GunFired = RemoteEvents:WaitForChild("GunFired")
 
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local ReticleGui = playerGui:WaitForChild("ReticleGui")
-local ReticleMain = ReticleGui:WaitForChild("ReticleMain")
-local MidReticle = ReticleMain:WaitForChild("Mid")
+local GunReticle = ReticleGui:WaitForChild("GunReticle")
+local MidReticle = GunReticle:WaitForChild("Mid")
 
 local function getReticleDirection()
     local ray1 = workspace.CurrentCamera:ScreenPointToRay(MidReticle.Position.X.Offset, MidReticle.Position.Y.Offset)
@@ -32,27 +32,37 @@ local function getReticleDirection()
 end
 
 local function ApplyViewportToolModelImpulse(toolModel)
-    local currentBaseOffset = toolModel:GetAttribute("CurrentBaseC0Offset")
-
+    local recoil = toolModel:GetAttribute("Recoil")
     if toolModel:GetAttribute("Aiming") then
-        local yValue = math.random(-1, 1) * 0.0125
-        local zValue = math.random(-1, 1) * 0.0125
-        currentBaseOffset = currentBaseOffset + Vector3.new(0, yValue, zValue)
-    else
-        local xValue = math.random(-1, 1) * 0.1
-        local yValue = math.random(-1, 1) * 0.1
-    
-        currentBaseOffset = currentBaseOffset + Vector3.new(xValue, yValue, 0.6)
+        recoil /= 2 
     end
+
+    local viewportModel = currentCamera:FindFirstChild("ViewportModel")
+    local neck = viewportModel.Head.Neck
+    local currentNeckC0 = neck.C0
+
+    local xValue = math.random(-5, 5) * 0.06 * recoil
+    local yValue = math.random(5, 5) * 0.06 * recoil
+    local zValue = math.random(5, 10) * -0.1 * recoil
+
+    local impulseCFrame = CFrame.new(xValue, yValue, zValue)
+    local targetCFrame = CFrame.new(
+        currentNeckC0.X + impulseCFrame.X,
+        currentNeckC0.Y + impulseCFrame.Y,
+        currentNeckC0.Z + impulseCFrame.Z
+    )
+    neck.C0 = neck.C0:Lerp(targetCFrame, 0.5)
     
-    toolModel:SetAttribute("CurrentBaseC0Offset", currentBaseOffset)
+
 end
 
-local function ApplyCameraRecoilImpulse()
+local function ApplyCameraRecoilImpulse(toolInstance)
 
-    local xValue = math.random(1, 10) * 0.06
-    local yValue = math.random(1, 10) * 0.06
-    local zValue = math.random(1, 10) * 0.06
+    local recoil = toolInstance:GetAttribute("Recoil")
+
+    local xValue = math.random(1, 10) * 0.08 * recoil
+    local yValue = math.random(1, 10) * 0.04 * recoil
+    local zValue = math.random(1, 10) * 0.04 * recoil
     
     local startCFrame = currentCamera.CFrame
 
@@ -64,8 +74,39 @@ local function ApplyCameraRecoilImpulse()
 
 end
 
-local _FireFunction = function(toolModel, toolInstance)
+local function showMuzzleFlash(toolModel, toolInstance)
+    local MuzzleModel = toolModel.Muzzle
+    local MuzzleFlashPointLight = MuzzleModel.MuzzleWithPointLight.MuzzleFlashPointLight
+    MuzzleFlashPointLight.Enabled = true
+    local decalTable = {}
+    for _, desc in ipairs(MuzzleModel:GetDescendants()) do
+        if desc:IsA("Decal") then
+            desc.Transparency = 0
+            table.insert(decalTable, desc)
+        end
+    end
+    task.wait(0.03)
+    MuzzleFlashPointLight.Enabled = false
+    for _, desc in ipairs(decalTable) do
+        desc.Transparency = 1
+    end
+end
 
+local function ExpandReticleFromCenter(toolInstance)
+    local RETICLE_MINIMM_XY_SCALE = 0.125 
+    local baseSizeIncrease = 0.12
+    local recoil = toolInstance:GetAttribute("Recoil")
+    local currentReticleSize = GunReticle.Size
+    
+    local finalIncrease = baseSizeIncrease * recoil
+    local newSize = UDim2.fromScale(
+        math.clamp(currentReticleSize.X.Scale + finalIncrease, RETICLE_MINIMM_XY_SCALE, 1),
+        math.clamp(currentReticleSize.Y.Scale + finalIncrease, RETICLE_MINIMM_XY_SCALE, 1)
+    )
+    GunReticle:TweenSize(newSize, Enum.EasingDirection.Out, Enum.EasingStyle.Sine, 0.03, true)    
+end
+
+local _FireFunction = function(toolModel, toolInstance)
     local gunshotSoundName = toolInstance:GetAttribute("GunshotSound")
 
     local raycastParams = RaycastParams.new()
@@ -77,13 +118,15 @@ local _FireFunction = function(toolModel, toolInstance)
 
     local raycastResult = workspace:Raycast(currentCamera.CFrame.Position, direction * 1000, raycastParams)
 
-    -- toolInstance:SetAttribute("CurrentAmmo", toolInstance:GetAttribute("CurrentAmmo") - 1)
+    -- toolInstance:SetAttribute("Ammo", toolInstance:GetAttribute("Ammo") - 1)
     ApplyViewportToolModelImpulse(toolModel)
-    task.spawn(ApplyCameraRecoilImpulse)
-    toolModel.BulletSpawn.MuzzleFlash:Emit(1)
+    task.spawn(ApplyCameraRecoilImpulse, toolInstance)
+    task.spawn(ExpandReticleFromCenter, toolInstance)
+    task.spawn(showMuzzleFlash, toolModel, toolInstance)
 
     GunFired:FireServer(toolInstance.Name, raycastResult.Instance)
     PlaySound:Fire(gunshotSoundName, origin, true)
+    toolModel:SetAttribute("Ammo", toolModel:GetAttribute("Ammo") - 1)
 end
 
 return _FireFunction

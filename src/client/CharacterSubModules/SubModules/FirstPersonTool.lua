@@ -12,18 +12,20 @@
 
 ]]
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
-local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ToolSettings = require(Shared:WaitForChild("ToolSettings"))
+local WeaponGuiModule = require(script.Parent:WaitForChild("WeaponGuiModule"))
 
 local localPlayer = Players.LocalPlayer
 
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 local ReticleGui = playerGui:WaitForChild("ReticleGui")
-local ReticleMain = ReticleGui:WaitForChild("ReticleMain")
+local GunReticle = ReticleGui:WaitForChild("GunReticle")
 
 local RemoteEvents = ReplicatedStorage:WaitForChild("Remote"):WaitForChild("Events")
 
@@ -43,22 +45,23 @@ function FirstPersonTool.new(instance, characterModuleObject)
     self.instance = instance
     self.name = instance.Name
     self.characterModuleObject = characterModuleObject
+    
     self._viewportModelHandler = characterModuleObject.viewportModelHandler
     self._animationController = characterModuleObject.animationController
     
     self._contextActionFunctionNames = {}
 
-    self._toolModel = nil
+    self.toolModel = nil
 
     if currentlyUnequipping then
-       repeat
-        task.wait()
-       until not currentlyUnequipping or self.instance.Parent ~= characterModuleObject.character
+        repeat
+            task.wait()
+        until not currentlyUnequipping or self.instance.Parent ~= characterModuleObject.character
 
-       if self.instance.Parent ~= characterModuleObject.character then
+        if self.instance.Parent ~= characterModuleObject.character then
             self:_CleanupForEarlyUnequip()
             return
-       end
+        end
 
     end
 
@@ -81,14 +84,37 @@ function FirstPersonTool:init()
     
     self.animations = self._animationController:LoadAnimations(self._settingsForTool.Animations)
 
+    self:_SetupViewportAnimations()
     self:_ConnectFunctionsToEvents()
     self:_CreateViewportModel()
     self:_CheckForActiavtionsOnEquip()
-
-    ReticleMain.Visible = true
-    UserInputService.MouseIconEnabled = true
-
+    WeaponGuiModule:ShowWeaponInfo(self)
+    
+    if not self.toolModel:GetAttribute("Aiming") then
+        GunReticle.Visible = true
+    end
+    
+    UserInputService.MouseIconEnabled = false
     coroutine.wrap(self._AnimateIdleAsync)(self)
+    coroutine.wrap(self._UpdateReticle)(self)
+end
+
+function FirstPersonTool:_SetupViewportAnimations()
+    self.viewportAnimations = {}
+
+    local viewportModel = ItemModels:FindFirstChild(self.instance.Name, true)
+    local animationIds = {
+        Idle = viewportModel:GetAttribute("ViewportIdleAnimationId"),
+        Aim = viewportModel:GetAttribute("ViewportAimAnimationId"),
+        Reload = viewportModel:GetAttribute("ViewportReloadAnimationId")
+    }
+
+    for name, id in pairs(animationIds) do
+        local animation = Instance.new("Animation")
+        animation.AnimationId = "rbxassetid://"..id
+        self.viewportAnimations[name] = self._viewportModelHandler.animator:LoadAnimation(animation)
+    end
+    
 end
 
 function FirstPersonTool:_AnimateIdleAsync()
@@ -101,13 +127,28 @@ function FirstPersonTool:_AnimateIdleAsync()
     end
 end
 
+function FirstPersonTool:_UpdateReticle()
+    local RETICLE_MINIMM_XY_SCALE = 0.125
+
+    while self.instance:IsDescendantOf(workspace) do
+        local currentReticleSize = GunReticle.Size
+        local newSize = UDim2.fromScale(
+            math.clamp(currentReticleSize.X.Scale - 0.02, RETICLE_MINIMM_XY_SCALE, 1),
+            math.clamp(currentReticleSize.Y.Scale - 0.02, RETICLE_MINIMM_XY_SCALE, 1)
+        )
+        GunReticle:TweenSize(newSize, Enum.EasingDirection.Out, Enum.EasingStyle.Linear, 0.05, true)
+        task.wait() 
+    end
+end
+
 -- Clone Model from ReplicatedStorage, then attach it to the viewport model
 function FirstPersonTool:_CreateViewportModel()
     local modelToClone = ItemModels:FindFirstChild(self.instance.Name, true)
 
     if modelToClone then
-        self._toolModel = modelToClone:Clone()
-        self._viewportModelHandler:AttachModelToViewportModel(self._toolModel)
+        print("Got model to clone for", self.instance.Name)
+        self.toolModel = modelToClone:Clone()
+        self._viewportModelHandler:AttachModelToViewportModel(self)
     end
 
 end
@@ -115,7 +156,7 @@ end
 function FirstPersonTool:_ConnectFunctionsToEvents()
     -- Context Action Functions
     for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
-        ContextActionService:BindActionAtPriority(functionName ,unpack(functionData))
+        ContextActionService:BindActionAtPriority(functionName, unpack(functionData))
     end
 
     -- Misc Functions TODO
@@ -139,6 +180,7 @@ function FirstPersonTool:_CheckForActiavtionsOnEquip()
         local activationEnum = functionData[4]
         if activationEnum.EnumType == Enum.UserInputType then -- Mouse Input
             if UserInputService:IsMouseButtonPressed(activationEnum) then
+                print(functionName, "Done!")
                 contextActionFunction("", Enum.UserInputState.Begin, nil)
             end
         elseif activationEnum.EnumType == Enum.KeyCode then   -- Keyboard Input
@@ -158,10 +200,6 @@ function FirstPersonTool:Destroy()
         return
     end
     
-    UserInputService.MouseIconEnabled = true
-    currentlyUnequipping = true
-    ReticleMain.Visible = false
-
     for functionName, functionData in pairs(self._settingsForTool.ContextActionFunctions) do
         local contextActionFunction = functionData[1]
         -- contextActionFunction("", Enum.UserInputState.End, nil)
@@ -174,11 +212,20 @@ function FirstPersonTool:Destroy()
     end
 
     self._viewportModelHandler:RemoveCurrentModel()
-    -- self._toolModel:Destroy()    -- Tool Model destruction handled by ViewportModelHandler
+    -- self.toolModel:Destroy()    -- Tool Model destruction handled by ViewportModelHandler
 
     currentlyUnequipping = false
 
-    self._toolModel = nil
+    self.toolModel = nil
+
+    -- Wait to see if new tool is equipped
+    task.wait(0.1)
+    if not localPlayer.Character:FindFirstChildOfClass("Tool") then
+        UserInputService.MouseIconEnabled = true
+        GunReticle.Visible = false
+        WeaponGuiModule:HideInfo()
+    end
+
 end
 
 return FirstPersonTool
